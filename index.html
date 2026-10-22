@@ -792,8 +792,8 @@ function fillModels() { // the provider's own list, from when its key was checke
 
 // --- connecting to a provider: the API key ----------------------------------------------------------
 // The page keeps the key in localStorage (this app or browser only) and sends it to the local server with
-// each request. POST /key checks a key before it's kept. ANTHROPIC_API_KEY / OPENAI_API_KEY / LLAMA_API_KEY / META_MODEL_API_KEY
-// in .env work as a fallback. The server's /key also returns the provider table.
+// each request. POST /key checks a key before it's kept. the provider's key in .env (ENV_KEYS in
+// server.js) works as a fallback. The server's /key also returns the provider table.
 let key = { env: false, envs: {} }, providers = { anthropic: { name: 'Claude (Anthropic)' } };
 const hasKey = () => !!store.get() || !!(key.envs || {})[provider()] || !!(providers[provider()] || {}).noKey;
 async function loadKey() {

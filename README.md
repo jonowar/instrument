@@ -62,7 +62,7 @@ by GitHub Pages; `docs/og.png` is the preview image.
 - Node 22+
 - An Anthropic API key from the [Claude Console](https://platform.claude.com/settings/keys) (the app walks you
   through it). Claude subscriptions (Pro/Max) can't be used: Anthropic only allows those in its own apps.
-- Or another provider: **OpenAI**, **Meta's Llama API**, **Muse Spark**, **Ollama** (Llama and others running on your Mac, free
+- Or another provider: **OpenAI**, **Meta's Llama API**, **Meta Muse Spark**, **Ollama** (Llama and others running on your Mac, free
   and offline) or any **OpenAI-compatible** endpoint (Together, Groq, OpenRouter, …). Pick it under ⚙ → Connect.
   The prompts are written for Claude, and the OpenAI-compatible path has been tested against a stand-in server
   only: expect weaker sound code from smaller models, and more use of Fix.
@@ -113,7 +113,7 @@ window quits it and shuts down sclang and scsynth.
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `LLAMA_API_KEY` | Fallback key for that provider if none is set in the ⚙ dialog |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `LLAMA_API_KEY`, `MODEL_API_KEY` | Fallback key if none is set in the ⚙ dialog: Claude, OpenAI, Meta Llama API, and Meta Muse Spark (the name Meta's docs use) |
 | `MODEL` | Claude model (default `claude-sonnet-5-5`); other providers' models are chosen in ⚙ |
 | `PRICE_IN`, `PRICE_OUT` | $ per million tokens, for models not in the built-in price table |
 | `MIDI_PORT` | Part of a MIDI destination's name; also send `~midi` to that device |
