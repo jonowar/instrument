@@ -17,12 +17,15 @@ await new Promise((r) => srv.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${srv.address().port}/v1`;
 const conn = { provider: 'custom', key: 'k', baseURL: base, priceIn: 2, priceOut: 10 };
 console.log('check', JSON.stringify(await checkKey('k', { provider: 'custom', baseURL: base })));
+console.log('spark check', JSON.stringify(await checkKey('k', { provider: 'spark', baseURL: base })));
 const g = await generate('a sine', '', [{ user: 'hi', code: 'x' }], conn, { model: 'gpt-x', effort: 'low' });
 console.log('generate', JSON.stringify(g.code), JSON.stringify(g.usage));
 console.log('body', JSON.stringify({ ...seen.at(-1).body, messages: seen.at(-1).body.messages.map((m) => m.role + ':' + typeof m.content) }));
 console.log('gear-ish', JSON.stringify('ollama is free'));
 try { await generate('x', '', [], { ...conn, key: 'bad' }, { model: 'gpt-x' }); } catch (e) { console.log('bad', e.code, e.message); }
 try { await generate('x', '', [], conn, {}); } catch (e) { console.log('nomodel', e.message); }
+const sp = await generate('a sine', '', [], { provider: 'spark', key: 'k', baseURL: base }, { model: 'muse-spark-1.3', effort: 'low' });
+console.log('spark generate', JSON.stringify(sp.code), JSON.stringify(sp.usage));
 const free = await generate('x', '', [], { provider: 'ollama', baseURL: base }, { model: 'llama3' });
 console.log('free cost', free.usage.cost, 'auth', seen.at(-1).auth);
 const nop = await generate('x', '', [], { provider: 'custom', key: 'k', baseURL: base }, { model: 'm' });
