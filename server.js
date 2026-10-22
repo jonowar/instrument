@@ -106,6 +106,7 @@ export const PROVIDERS = {
   anthropic: { name: 'Claude (Anthropic)', keyUrl: 'https://platform.claude.com/settings/keys', billingUrl: 'https://platform.claude.com/settings/billing', keyPrefix: 'sk-ant-' },
   openai: { name: 'OpenAI', baseURL: 'https://api.openai.com/v1', keyUrl: 'https://platform.openai.com/api-keys', billingUrl: 'https://platform.openai.com/settings/organization/billing' },
   llama: { name: 'Meta Llama API', baseURL: 'https://api.llama.com/compat/v1', keyUrl: 'https://llama.developer.meta.com/' },
+  spark: { name: 'Muse Spark (Meta)', baseURL: 'https://api.meta.ai/v1', keyUrl: 'https://developer.meta.com/' },
   ollama: { name: 'Ollama (local, free)', baseURL: 'http://localhost:11434/v1', noKey: true, free: true },
   custom: { name: 'Other (OpenAI-compatible)', baseURL: '' },
 };
@@ -146,7 +147,7 @@ const pickModel = (m) => (m && (m in PRICES || m === MODEL) ? m : MODEL);
 
 // --- the API key ---
 // .env's ANTHROPIC_API_KEY (or OPENAI_API_KEY / LLAMA_API_KEY), unless it's the placeholder from .env.example
-const ENV_KEYS = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', llama: 'LLAMA_API_KEY' };
+const ENV_KEYS = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', llama: 'LLAMA_API_KEY', spark: 'META_MODEL_API_KEY' };
 const envKey = (provider = 'anthropic') => { const k = process.env[ENV_KEYS[provider]]; return k && !k.endsWith('...') ? k : null; };
 const keyHint = (k) => `${k.slice(0, 7)}…${k.slice(-4)}`; // enough to recognise a key without revealing it
 // An Error with a code the page acts on: no_key, bad_key, no_credit
