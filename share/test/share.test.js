@@ -213,8 +213,10 @@ test('previews as a track, with no image', async () => {
   assert.equal(tag('og:site_name'), 'AnInstrument');
   assert.equal(tag('og:type'), 'music.song');
   assert.equal(tag('og:description'), '0:01 · 3 parts · 5,092 notes · live-coded in SuperCollider');
-  assert.equal(tag('og:image'), null, 'no image');
-  assert.equal(tag('twitter:card'), 'summary', 'the card type that works without one');
+  assert.equal(tag('og:image'), 'https://aninstrument.jono.solutions/icon.png', 'the app icon is the preview image');
+  assert.equal(tag('og:image:width'), '256');
+  assert.equal(tag('og:image:height'), '256');
+  assert.equal(tag('twitter:card'), 'summary', 'the small square card, not a cropped large one');
   assert.ok(html.includes('rel="apple-touch-icon"'), 'iOS has an icon for the compact row');
   assert.ok(html.includes('property="og:audio"'), 'still declares the audio');
 });

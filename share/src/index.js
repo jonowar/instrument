@@ -38,7 +38,7 @@ const TTL_DAYS = 90;
 
 const SITE = 'https://aninstrument.jono.solutions/';
 const DOWNLOAD = 'https://github.com/jonowar/instrument/releases/latest/download/AnInstrument-arm64.dmg';
-const ICON = 'https://aninstrument.jono.solutions/icon.png'; // the compact preview's icon on iOS
+const ICON = 'https://aninstrument.jono.solutions/icon.png'; // the compact preview's icon on iOS, and og:image
 
 // No l/o/0/1, so an id read off a screen can't be mistyped. 12 chars of 32 is 60 bits.
 const ID_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -212,10 +212,13 @@ function page(meta, id, url, nonce) {
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${esc(canonical)}">
-<!-- No og:image on purpose. The app screenshot said nothing about the track, and without an image
-     iMessage falls back to its compact row: icon, title, then the line above. That reads like a
-     track rather than like an article, which is the point. twitter:card has to be "summary", the
-     one card type that works with no image. -->
+<!-- og:image is the app icon, not a screenshot: a screenshot said nothing about the track, but the
+     icon says whose it is, and it is square, so twitter:card has to be "summary" (the small-thumbnail
+     card; summary_large_image would crop it). The title and the line above still carry the track. -->
+<meta property="og:image" content="${ICON}">
+<meta property="og:image:width" content="256">
+<meta property="og:image:height" content="256">
+<meta property="og:image:alt" content="The AnInstrument icon">
 <meta name="twitter:card" content="summary">
 ${meta.audio ? `<meta property="og:audio" content="${esc(new URL(`/a/${id}.mp3`, canonical).href)}">
 <meta property="og:audio:type" content="audio/mpeg">` : ''}
