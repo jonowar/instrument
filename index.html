@@ -935,7 +935,12 @@ const lib = {
   save: (list) => { try { localStorage.setItem('saved-patches', JSON.stringify(list)); return true; } catch { return false; } },
 };
 // default name: first few words of the first prompt, since that's what you'll remember it by
-const suggestName = () => ((turns[0]?.prompt || $('prompt').value).trim().split(/\s+/).slice(0, 4).join(' ') || '').slice(0, 24);
+// With dots = true a cut-short name ends in "...", so a shared title doesn't pass for the whole prompt.
+const suggestName = (dots = false) => {
+  const words = (turns[0]?.prompt || $('prompt').value).trim().split(/\s+/).filter(Boolean);
+  const name = words.slice(0, 4).join(' ');
+  return name.slice(0, 24) + (dots && (words.length > 4 || name.length > 24) ? '...' : '');
+};
 const nTurns = (n) => `${n} turn${n === 1 ? '' : 's'}`;
 
 function renderLibrary() {
@@ -1101,7 +1106,7 @@ function openShare() {
   shareMsg('');
   $('shareWhat').textContent = code.trim()
     ? `${code.split('\n').length} lines${take ? ` · a ${mmss(take.seconds)} take` : ''}` : '';
-  $('shareTitle').value = session.get() || suggestName();
+  $('shareTitle').value = session.get() || suggestName(true);
   $('shareAudioRow').hidden = !take;
   if (take) { $('shareAudio').checked = true; $('shareAudioLen').textContent = `(${mmss(take.seconds)})`; }
   $('shareGo').disabled = !code.trim();

@@ -148,6 +148,20 @@ app.whenReady().then(async () => {
     const opened = await run(`window.__opened`);
     check(opened[0] === 'https://share.example.invalid/s/abcdefghijkm', 'Open hands the link to the browser');
 
+    // the default share title is the start of the first prompt, with "..." when it was cut
+    const names = await run(`(() => {
+      const out = [];
+      for (const t of ['a short pad', 'a slow detuned saw pad with reverb', 'extraordinarily-long-single-word-prompt']) {
+        $('prompt').value = t; turns.length = 0; out.push(suggestName(true));
+      }
+      $('prompt').value = 'a slow detuned saw pad with reverb'; out.push(suggestName());
+      return out;
+    })()`);
+    check(names[0] === 'a short pad', 'a short prompt is the title as it is', names[0]);
+    check(names[1] === 'a slow detuned saw...', 'a long prompt is cut with ...', names[1]);
+    check(names[2].endsWith('...'), 'so is one cut at 24 characters', names[2]);
+    check(names[3] === 'a slow detuned saw', 'saving a session keeps its plain name', names[3]);
+
     // other providers: pick OpenAI in Connect, paste a key, choose a model, and requests carry them
     await run(`localStorage.clear(); loadKey().then(() => { openConnect(); })`);
     await settle();
