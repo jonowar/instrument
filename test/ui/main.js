@@ -3,9 +3,18 @@
 // the network. Run with `npm run test:ui` from the repo root.
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
+const http = require('node:http');
+const fs = require('node:fs');
 
-const PAGE = pathToFileURL(path.join(__dirname, '..', '..', 'index.html')).href;
+// The page is ES modules, which Chromium won't load from file://, so serve the repo's files over http.
+const ROOT = path.join(__dirname, '..', '..');
+const staticServer = http.createServer((req, res) => {
+  const f = req.url === '/' ? 'index.html' : req.url.replace(/^\//, '');
+  if (!/^(index\.html|js\/[a-z]+\.js)$/.test(f)) { res.statusCode = 404; return res.end(); }
+  res.setHeader('content-type', f.endsWith('.js') ? 'text/javascript' : 'text/html');
+  res.end(fs.readFileSync(path.join(ROOT, f)));
+});
+let PAGE;
 const problems = [];
 let failures = 0;
 const check = (ok, what, extra = '') => {
@@ -16,6 +25,8 @@ const check = (ok, what, extra = '') => {
 app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {
+  await new Promise((r) => staticServer.listen(0, '127.0.0.1', r));
+  PAGE = `http://127.0.0.1:${staticServer.address().port}/`;
   const win = new BrowserWindow({
     show: false,
     width: 1400,
@@ -62,7 +73,7 @@ app.whenReady().then(async () => {
     // now with code and a finished take
     await run(`
       $('code').value = 'Pdef(\\\\kick, Pbind(\\\\degree, 0)).play;\\nNdef(\\\\pad, { SinOsc.ar(220) * 0.1 }).play;';
-      rec = { state: 'idle', take: { id: '1760000000000', seconds: 102, notes: 48 } };
+      S.rec = { state: 'idle', take: { id: '1760000000000', seconds: 102, notes: 48 } };
       $('shareBtn').click();
     `);
     const ready = await run(`({
@@ -87,8 +98,9 @@ app.whenReady().then(async () => {
       anim: getComputedStyle($('shareGo').querySelector('.up')).animationName,
     })`);
     check(busy.busy && busy.disabled, 'the Share button is busy and disabled while uploading');
-    check(busy.label === 'Uploading…', 'its label says Uploading…', busy.label);
+    check(busy.label === 'Uploading', 'its label says Uploading', busy.label);
     check(busy.anim === 'shareRise', 'the arrow is animated', busy.anim);
+    check(await run(`getComputedStyle($('shareGoLabel'), '::after').animationName`) === 'dots', 'the label has animated dots');
     await run(`window.__release()`);
     await settle();
     const idle = await run(`({
@@ -152,7 +164,7 @@ app.whenReady().then(async () => {
     const names = await run(`(() => {
       const out = [];
       for (const t of ['a short pad', 'a slow detuned saw pad with reverb', 'extraordinarily-long-single-word-prompt']) {
-        $('prompt').value = t; turns.length = 0; out.push(suggestName(true));
+        $('prompt').value = t; S.turns.length = 0; out.push(suggestName(true));
       }
       $('prompt').value = 'a slow detuned saw pad with reverb'; out.push(suggestName());
       return out;
@@ -161,6 +173,84 @@ app.whenReady().then(async () => {
     check(names[1] === 'a slow detuned saw...', 'a long prompt is cut with ...', names[1]);
     check(names[2].endsWith('...'), 'so is one cut at 24 characters', names[2]);
     check(names[3] === 'a slow detuned saw', 'saving a session keeps its plain name', names[3]);
+
+    // no button on the command row may kill a model request in flight: press them all while one is pending
+    await run(`window.__aborted = false; window.__holdGen = new Promise((r) => (window.__releaseGen = r)); $('prompt').value = 'a pad'; $('gen').click()`);
+    await settle();
+    await run(`for (const id of ['run', 'stop', 'runRec', 'recBtn', 'fadeBtn', 'gearBtn']) $(id).click()`);
+    await settle();
+    await run(`window.__releaseGen(); window.__holdGen = null`);
+    await settle();
+    check(await run(`window.__aborted === false`), 'no command-row button aborts a request in flight');
+    check(await run(`$('code').value.length > 0 && !$('gen').disabled`), 'the pending request still lands after them');
+    // syntax highlighting: coloured runs in #marks, text unchanged
+    await run(`$('code').value = '// hi\\nPdef(\\\\a, Pbind(\\\\dur, 0.5, "s")).play; ~x = var nil;'`);
+    const hl = await run(`({
+      text: $('marks').textContent, code: $('code').value,
+      kinds: [...new Set([...$('marks').querySelectorAll('span')].map((e) => e.className))].sort(),
+      color: getComputedStyle($('marks').querySelector('.t-k')).color,
+    })`);
+    check(hl.text === hl.code.replace(/\n/g, ''), 'highlighting changes no text', JSON.stringify(hl.text));
+    check(['t-c', 't-e', 't-k', 't-n', 't-s', 't-w', 't-y'].every((k) => hl.kinds.includes(k)), 'comments, strings, symbols, numbers, classes, keywords and ~vars each get a colour', hl.kinds.join(' '));
+    // live mode sends only the statements that changed, blanked to keep line numbers
+    const prev = 'SynthDef(\\a, { Out.ar(0, SinOsc.ar) }).add;\n{ Saw.ar(100) }.play; // drone\nPdef(\\x, Pbind(\\dur, 1)).play;';
+    const next = 'SynthDef(\\a, { Out.ar(0, SinOsc.ar) }).add;\n{ Saw.ar(100) }.play; // drone\nPdef(\\x, Pbind(\\dur, 0.5)).play;';
+    const d = await run(`({
+      same: liveDiff(${JSON.stringify(prev)}, ${JSON.stringify(prev)}),
+      edit: liveDiff(${JSON.stringify(prev)}, ${JSON.stringify(next)}),
+      first: liveDiff(null, ${JSON.stringify(next)}) === ${JSON.stringify(next)},
+      env: liveDiff('~t = 1;\\nPdef(\\\\a, 1).play;', '~t = 2;\\nPdef(\\\\a, 1).play;'),
+      variable: liveDiff('var a = 1;\\na.postln;', 'var a = 2;\\na.postln;'),
+      semi: topStatements('"a;b".post; // x; y\\n{ 1; 2 }.value; $;').length,
+    })`);
+    check(d.same.trim() === '' && d.same.split('\n').length === 3, 'an unchanged live edit sends only blank lines', JSON.stringify(d.same));
+    check(d.edit.split('\n').length === 3 && !d.edit.includes('SynthDef') && !d.edit.includes('Saw') && d.edit.includes('0.5'), 'only the changed statement is sent, on its own line', JSON.stringify(d.edit));
+    check(d.first, 'with no earlier run, everything is sent');
+    check(d.env === '~t = 2;\nPdef(\\a, 1).play;' && d.variable === 'var a = 2;\na.postln;', 'a changed ~setting or a var sends the whole file');
+    check(d.semi === 3, 'statements split at ; outside strings, comments, brackets and $; ', d.semi);
+    // shell commands in the code: flagged on their line and in the error tile as a warning, never sent to Claude
+    await run(`$('code').value = '{ SinOsc.ar }.play;\\n"ls".unixCmdGetStdOut;\\n// "x".unixCmd'`);
+    const sh = await run(`({
+      gutter: [...$('gutter').children].map((d) => d.className),
+      mark: $('marks').querySelectorAll('.shellcmd').length,
+      tile: !$('errTile').hidden && $('errTile').classList.contains('warn'), kind: $('errKind').textContent, body: $('errBody').textContent,
+      explain: $('reanalyze').hidden,
+    })`);
+    check(sh.gutter[1] === 'shell' && sh.gutter[0] !== 'shell' && sh.gutter[2] !== 'shell', 'only the line with a shell command is flagged (comments are ignored)', JSON.stringify(sh.gutter));
+    check(sh.mark === 1, 'the command is highlighted in the text', sh.mark);
+    check(sh.tile && sh.kind === 'warning' && /Line 2/.test(sh.body) && sh.explain, 'the error tile warns, without an Explain button', JSON.stringify(sh));
+    await run(`$('code').value = '{ SinOsc.ar }.play;'`);
+    check(await run(`$('errTile').hidden`), 'the warning goes away with the command');
+    // Learn: a step-by-step walk through the code, click-to-select, links built from data, questions
+    await run(`localStorage.clear(); $('code').value = '{ SinOsc.ar(440) }\\n.play;\\n// done'; $('learnBtn').click()`);
+    await settle();
+    const lr = await run(`({ open: !$('learn').hidden, steps: document.querySelectorAll('#learnBody .step').length,
+      links: [...document.querySelectorAll('#learnBody .term a')].map((a) => a.href),
+      terms: [...document.querySelectorAll('#learnBody .term')].map((t) => t.textContent),
+      imgs: document.querySelectorAll('#learnBody img').length, pwned: !!window.__pwned,
+      cost: $('learnCost').textContent, session: $('usage').textContent,
+      call: window.__calls.filter((c) => c.path === '/explain').length })`);
+    check(lr.open && lr.steps === 2, 'Learn opens with the steps', JSON.stringify(lr));
+    check(lr.links.length === 1 && lr.links[0] === 'https://doc.sccode.org/Classes/SinOsc.html', 'only a class name becomes a docs link', JSON.stringify(lr.links));
+    check(lr.imgs === 0 && !lr.pwned, 'text from the model is never run as HTML');
+    check(/900/.test(lr.cost) && /\$0\.0123/.test(lr.cost) && /session/.test(lr.session), 'the call shows its cost where it was made, and in the session total', lr.cost);
+    await run(`document.querySelectorAll('#learnBody .step')[1].click()`);
+    const sel = await run(`(() => { const t = $('code'); return t.value.slice(t.selectionStart, t.selectionEnd); })()`);
+    check(sel === '.play;\n// done', 'clicking a step selects its lines in the editor', JSON.stringify(sel));
+    await run(`$('learnBtn').click()`); await settle();
+    check((await run(`window.__calls.filter((c) => c.path === '/explain').length`)) === 2, 'a selection is a different request');
+    const sent = await run(`window.__calls.filter((c) => c.path === '/explain').at(-1).body`);
+    check(sent.from === 2 && sent.to === 3, 'and it sends the lines selected', JSON.stringify(sent));
+    await run(`$('learnBtn').click()`); await settle();
+    check((await run(`window.__calls.filter((c) => c.path === '/explain').length`)) === 2, 'asking again for the same code and lines is free (cached)');
+    await run(`document.querySelector('#learnBody .try').click()`);
+    check((await run(`$('prompt').value`)) === 'Change 440 to 220.', 'a suggested experiment goes into the prompt');
+    await run(`$('learnQ').value = 'why 440?'; $('learnAsk').requestSubmit()`);
+    await settle();
+    const qa = await run(`({ text: $('learnBody').textContent, body: window.__calls.find((c) => c.path === '/question').body })`);
+    check(/Because A above middle C/.test(qa.text) && qa.body.question === 'why 440?' && qa.body.code.includes('SinOsc'), 'a question gets an answer, with the code sent along');
+    await run(`$('learnClose').click()`);
+    check(await run(`$('learn').hidden`), 'Learn closes');
 
     // other providers: pick OpenAI in Connect, paste a key, choose a model, and requests carry them
     await run(`localStorage.clear(); loadKey().then(() => { openConnect(); })`);

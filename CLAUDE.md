@@ -17,6 +17,11 @@ local scsynth. See README.md for features, architecture and the security model.
   truncated, usage }`. New features keep calling `ask()` and must not assume Anthropic-only features (cache
   control, `output_config`); the adapter flattens those. Prices for non-Claude models come from the user
   (⚙), and are shown as unknown rather than guessed. Test it with a stand-in server, as no keys are needed.
+- **Anything waiting on the network shows it.** Text that waits on a request gets the `.dots` class (animated ...),
+  in the place that made the call; no floating overlays. New async features use it rather than a fixed "…".
+- **No button on the command row may kill a model request in flight.** Nothing in the page aborts a
+  request (no `AbortController`); Run, Stop, Rec, Fade, Gear and the rest only act on sclang and the
+  recorder, and the pending answer still lands. Keep it so, and keep the check in `test/ui/main.js`.
 - Links shown to the user are built from data (e.g. store searches), never URLs written by the model.
 - **Anything new that sends the user's code or recordings off this machine is opt-in and says so where
   the user presses it.** Today that is ⤴ Share: the dialog explains that the link is public before the
@@ -26,6 +31,11 @@ local scsynth. See README.md for features, architecture and the security model.
 - The share service (`share/`) is a separate package with its own tests: `npm run dev` then
   `npm test` in that directory runs the Worker against local R2, so it needs no Cloudflare account.
   Its caps and abuse controls are listed in `share/README.md`; change them there, not in the app.
+- **The page is ES modules** in `js/`, one per area (editor, parts, learn, share, ...), loaded by `js/main.js`
+  with no build step; `server.js` serves them at `/js/<name>.js`. State used by more than one module lives in
+  `S` (`js/state.js`), since an imported `let` can't be assigned. `util.js` imports nothing, so any module can
+  use it; cross-module calls at load time can hit a cycle (see `hooks` in util.js). Shapes are JSDoc typedefs
+  in `js/types.js`, and `npm run typecheck` (tsc, no emit) must pass; add a route to `Routes` when you add one.
 - Test page changes in a hidden Electron window with `fetch` stubbed (`npm run test:ui`, in `test/ui/`);
   test Claude calls through the
   exported functions in server.js (`generate`, `gear`) with `node --env-file=.env`, since the running

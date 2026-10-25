@@ -1,10 +1,11 @@
 {
   "name": "instrument",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "main": "electron/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:ui": "electron test/ui",
+    "typecheck": "tsc -p .",
     "start": "node --env-file-if-exists=.env server.js",
     "app": "sh build/dev-name.sh && electron .",
     "dist": "NODE_OPTIONS=--experimental-require-module electron-builder --mac --dir",
@@ -23,8 +24,11 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
     "electron": "^41.7.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.9.3"
   },
   "productName": "AnInstrument",
   "build": {
@@ -33,6 +37,7 @@
     "files": [
       "server.js",
       "index.html",
+      "js/**",
       "*.scd",
       "electron/**",
       "package.json",

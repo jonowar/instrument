@@ -44,6 +44,7 @@ Rules:
 - When the code plays chords (always when the user asks for chords, a progression or harmony), annotate each chord with a // comment giving its name, its notes and its role in the key, e.g. // Am7: A C E G (ii in G major), next to where it is defined. For a progression, also add a one-line comment above it naming the key and the progression in Roman numerals.
 - Whenever notes are written as numbers in an array, put a // comment on the same line naming each note in order, so the numbers can be read as music. MIDI note numbers (\\midinote, .midicps): absolute names with octave, where 60 = C4, e.g. Pseq([60, 63, 67, 70]) // C4 Eb4 G4 Bb4. Scale degrees (\\degree with \\scale, \\root, \\octave): the notes they produce in that key, e.g. Pseq([0, 2, 4]) // C E G (degrees 1 3 5 of C major). Semitone offsets added to a root: the notes for that root, e.g. [0, 4, 7] // C E G on root C. Spell sharps or flats to suit the key, and use "rest" for \\rest or Rest().
 - Use current SuperCollider (3.14) names, not deprecated ones that print warnings: Pdup, not Pstutter. This includes code from earlier turns.
+- Never run shell or system commands: no unixCmd, unixCmdGetStdOut, systemCmd or runInTerminal, even when asked; use sclang's own classes (File, Buffer, Pbind...) instead, or say in a // comment that it can't be done safely.
 - Keep output safe: end every signal chain with a limiter or modest amp (<= 0.3) and never produce DC or runaway feedback.
 - This is a conversation about one piece of code that you and the user refine together. Every reply is the complete current code (never a fragment or diff), because it replaces the editor. Keep what earlier turns built unless the user asks to change it.
 - The user may edit the code between turns. When a message includes the current code, that is the latest version: build on it, including their edits.`;
@@ -56,6 +57,38 @@ Do NOT rewrite the code. Explain what is wrong:
 - Then a few short sentences on why it happens in SuperCollider terms (what the language or server is doing), citing the line number and the offending expression.
 - End with a line starting "Try:" giving the smallest change to make, described in words or a tiny inline snippet.
 Plain text only (it is shown as typed): no markdown headings, bullets or code fences. Write for a beginner glancing at a small tile under the editor, so give them what they need to act on and no more.`;
+
+const EXPLAIN_SYSTEM = `You teach SuperCollider to programmers who are new to audio and synthesis. They can read code; they do not know sound design or SuperCollider's model.
+You get SuperCollider (sclang) code with line numbers, and sometimes a range of lines to focus on (explain only those lines, using the rest as context). Do NOT rewrite or fix the code.
+- "overview": two or three sentences on what the code does as a whole, and what you would hear.
+- "steps": walk the code in order. Each step covers a run of consecutive lines doing one thing ("from" and "to" are line numbers from the listing). "what" says what those lines do in SuperCollider terms; "why" gives the reason, usually the audio idea behind it (what a filter cutoff does to the timbre, why an envelope needs doneAction: 2, why .kr and not .ar, why s.sync) or the language idea. Use real numbers from the code ("440 Hz is concert A"). Skip blank lines and pure comments. At most 12 steps; merge small ones.
+- "concepts": the 3-8 terms worth learning from this code. Name SuperCollider classes exactly as the documentation spells them (SinOsc, Pbind, Ndef, EnvGen, LPF...) and put them in "term"; for ideas that are not a class (sample rate, Nyquist, detuning, ADSR) use a plain lowercase phrase. "meaning" is one or two sentences; where a programming analogy helps, use it (the server and the language are separate processes talking over OSC; a UGen graph is a dataflow graph run once per audio block; Pbind is a stream of event dictionaries; .ar and .kr are sample-rate and control-rate evaluation).
+- "try": 2-4 small experiments the learner can do by editing the code: "change" is the exact edit, "hear" is what they will notice.
+Be exact. Work out what the code actually does, not what it was probably meant to do, and say so when they differ. Mind SuperCollider's semantics: math between arrays of different sizes wraps the shorter one (it does not make a table; *.x does that); an array in a UGen argument expands into parallel UGens; the last expression of a function is its output; .play on a function returns a Synth, on a Pattern an EventStreamPlayer. If you are not sure what a line does, say what you are sure of rather than guess.
+Write for a learner reading a side panel. Plain text only in every string (it is shown as typed): no markdown, bullets or code fences; short inline code like SinOsc.ar(440) is fine. Never invent URLs.`;
+
+const QUESTION_SYSTEM = `You teach SuperCollider to programmers who are new to audio and synthesis. They are looking at some code and ask you a question about it, or about SuperCollider or sound in general.
+- Be exact: work out what the code actually does, not what it was probably meant to do, and say when they differ (math between arrays of different sizes wraps the shorter one; *.x makes the table). If you are not sure, say what you are sure of.
+- Answer the question directly first, in the first sentence, then give the reasoning, citing line numbers and numbers from their code where relevant.
+- Where a programming analogy helps, use one. Keep to what is needed: a few short paragraphs at most.
+- If the best answer is a change to the code, show the smallest change as a short snippet and say what they will hear, but do not rewrite their whole program.
+- Plain text only (shown as typed): no markdown headings or bullets. Short code snippets are fine, written inline. Never invent URLs.`;
+
+const EXPLAIN_SCHEMA = (() => {
+  const str = { type: 'string' };
+  return {
+    type: 'object', additionalProperties: false, required: ['overview', 'steps', 'concepts', 'try'],
+    properties: {
+      overview: str,
+      steps: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'to', 'what', 'why'],
+        properties: { from: { type: 'integer' }, to: { type: 'integer' }, what: str, why: str } } },
+      concepts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['term', 'meaning'],
+        properties: { term: str, meaning: str } } },
+      try: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['change', 'hear'],
+        properties: { change: str, hear: str } } },
+    },
+  };
+})();
 
 const GEAR_SYSTEM = `You advise someone learning synthesis on what physical instruments (hardware synths, drum machines, samplers, grooveboxes, effects pedals and units) could recreate a sound they made in SuperCollider.
 You get the SuperCollider code and the requests that produced it. Work out the sound's parts (e.g. the detuned saw pad, the sub bass, the 808-style kick, the shimmering reverb) and suggest 3-6 instruments:
@@ -266,6 +299,8 @@ async function askOpenAI(conn, system, content, maxTokens, { model, effort, form
 // `content` is a single user message, or a full messages array for a conversation.
 // `format` is a JSON schema the reply must follow (structured output).
 // `kind` names the feature for the usage history (generate, fix, analysis, gear).
+/** @typedef {{ model?: string, effort?: string, format?: object, kind?: string }} AskOptions */
+/** @param {any} apiKey @param {string} system @param {string | object[]} content @param {number} maxTokens @param {AskOptions} [opts] */
 async function ask(apiKey, system, content, maxTokens, { model, effort, format, kind = 'other' } = {}) {
   // apiKey is an Anthropic key string (or nothing, for .env's), or { provider, key, baseURL, priceIn, priceOut }
   if (apiKey && typeof apiKey === 'object') {
@@ -285,10 +320,10 @@ async function ask(apiKey, system, content, maxTokens, { model, effort, format, 
   try {
     // Stream and collect: large max_tokens values can exceed the SDK's limit for non-streaming requests.
     const res = await client.messages
-      .stream({
+      .stream(/** @type {any} */ ({ // output_config is newer than the SDK's types
         model, max_tokens: maxTokens, system, messages,
         ...(Object.keys(output_config).length && { output_config }),
-      })
+      }))
       .finalMessage();
     const usage = summarizeUsage(res.usage, model);
     recordUsage?.({
@@ -337,7 +372,47 @@ export async function generate(prompt, currentCode, history, apiKey, opts) {
   return { code: stripFences(text), user, truncated, usage };
 }
 
+// The code as the model reads it: numbered, so "line 7" means the same line as the editor's gutter.
+const numbered = (code) => String(code).split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
+// A range of lines to focus on, or null for the whole thing; clamped to the code.
+function focusRange(code, from, to) {
+  const n = String(code).split('\n').length;
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return null;
+  const a = Math.max(1, Math.min(from, n)), b = Math.max(a, Math.min(to, n));
+  return a === 1 && b === n ? null : [a, b];
+}
+const MAX_LEARN_CODE = 60000;
+
+// Explains the code (or the lines from..to) step by step, as EXPLAIN_SCHEMA JSON, for programmers new to audio.
+/** @param {any} apiKey @param {{ code?: string, from?: number, to?: number, model?: string, effort?: string }} [opts] */
+export async function explain(apiKey, { code, from, to, model, effort } = {}) {
+  if (typeof code !== 'string' || !code.trim()) throw new Error('Nothing in the editor to explain');
+  if (code.length > MAX_LEARN_CODE) throw new Error('That is too much code to explain at once: select part of it');
+  const r = focusRange(code, from, to);
+  const content = `${r ? `Explain only lines ${r[0]} to ${r[1]}; the rest is context.\n\n` : ''}Code:\n${numbered(code)}`;
+  const { text, truncated, usage } = await ask(apiKey, EXPLAIN_SYSTEM, content, 6000, { model, effort, format: EXPLAIN_SCHEMA, kind: 'explain' });
+  if (truncated) throw new Error('The explanation was cut off; try again, or select less code');
+  return { explanation: JSON.parse(text), range: r, usage };
+}
+
+// A question about the code (and sound or SuperCollider in general). history: earlier [{ q, a }] in this panel.
+/** @param {any} apiKey @param {{ code?: string, question?: string, history?: { q: string, a: string }[], model?: string, effort?: string }} [opts] */
+export async function question(apiKey, { code, question: q, history, model, effort } = {}) {
+  if (typeof q !== 'string' || !q.trim()) throw new Error('Type a question first');
+  if (typeof code === 'string' && code.length > MAX_LEARN_CODE) throw new Error('That is too much code to ask about at once');
+  const earlier = (Array.isArray(history) ? history : []).filter((t) => typeof t?.q === 'string' && typeof t?.a === 'string').slice(-6);
+  const messages = [
+    { role: 'user', content: `The code I'm looking at:\n${typeof code === 'string' && code.trim() ? numbered(code) : '(nothing in the editor yet)'}` },
+    { role: 'assistant', content: 'Got it. What would you like to know?' },
+    ...earlier.flatMap((t) => [{ role: 'user', content: t.q.slice(0, 1000) }, { role: 'assistant', content: t.a.slice(0, 4000) }]),
+    { role: 'user', content: q.trim().slice(0, 1000) },
+  ];
+  const { text, truncated, usage } = await ask(apiKey, QUESTION_SYSTEM, messages, 2000, { model, effort, kind: 'question' });
+  return { answer: text.trim(), truncated, usage };
+}
+
 // Gear that could play this sound: the code plus the prompts behind it, answered as GEAR_SCHEMA JSON.
+/** @param {any} apiKey @param {{ code?: string, prompts?: string[], model?: string, effort?: string }} [opts] */
 export async function gear(apiKey, { code, prompts, model, effort } = {}) {
   if (!code?.trim()) throw new Error('Nothing in the editor to find gear for');
   const asked = (Array.isArray(prompts) ? prompts : []).filter((p) => typeof p === 'string').slice(-20);
@@ -532,6 +607,7 @@ export async function start({
   let parts = []; // [{ kind: 'pdef'|'ndef', name, playing, muted }] from parts.scd
   let bootLog = '';
   // Input sent while the class library is still compiling gets lost, so queue until sclang's banner.
+  /** @type {import('node:child_process').ChildProcess | null} */
   let sc = null; // the sh | sclang process; null until SuperCollider is found
   let scReady = false;
   const scQueue = [];
@@ -670,7 +746,7 @@ export async function start({
   udp.on('error', (e) => { if (udpBound) log(`! the scope/MIDI socket failed: ${e.message}\n`); });
   try {
     await new Promise((ok, fail) => {
-      udp.once('error', (e) => fail(e.code === 'EADDRINUSE'
+      udp.once('error', (/** @type {NodeJS.ErrnoException} */ e) => fail(e.code === 'EADDRINUSE'
         ? Object.assign(new Error(`UDP port ${scopePort} is already in use: another copy of AnInstrument (or npm start) is running.`), { code: 'EADDRINUSE' })
         : e));
       udp.bind(scopePort, '127.0.0.1', () => { udpBound = true; ok(); });
@@ -816,12 +892,12 @@ export async function start({
 
   // keep: the part keys the code mentions outside comments (the page works them out). After the code
   // runs, parts.scd stops every other part, so deleting or commenting out a part silences it.
-  async function runCode(code, keep) {
+  async function runCode(code, keep, full = code) { // full: what the editor holds, when a live edit sends only what changed
     const keys = (Array.isArray(keep) ? keep : []).filter((k) => typeof k === 'string' && PART_KEY.test(k));
     // Write to a file and load it: avoids stdin line-by-line interpretation of multi-line code.
     const file = join(tmp, `run${runCount++ % 2}.scd`);
     sinceRun = '';
-    lastRunCode = code;
+    lastRunCode = full;
     // `fork {` shares line 1 with the code so sclang's line numbers match the editor's, and its
     // Routine context makes s.sync / wait legal anywhere. The parts sync runs after the code, which
     // sits in its own function so the sync is a separate statement however the code ends (`; ;`,
@@ -838,6 +914,7 @@ export async function start({
     return sinceRun.slice(Math.max(0, i - 300), i + 4000).trim();
   }
 
+  /** @param {any} apiKey @param {{ model?: string }} [opts] */
   async function analyze(apiKey, { model } = {}) {
     const errors = errorContext();
     if (!errors) return { analysis: null };
@@ -882,6 +959,11 @@ export async function start({
         res.writeHead(200, { 'content-type': 'text/html' });
         return res.end(await readFile(fileURLToPath(new URL('./index.html', import.meta.url))));
       }
+      const mod = req.method === 'GET' && req.url.match(/^\/js\/([a-z]+)\.js$/); // the page's ES modules (js/)
+      if (mod) {
+        try { res.writeHead(200, { 'content-type': 'text/javascript' }); return res.end(await readFile(fileURLToPath(new URL(`./js/${mod[1]}.js`, import.meta.url)))); }
+        catch { return json(res, 404, { error: 'not found' }); }
+      }
       if (req.method === 'POST' && !req.headers['content-type']?.startsWith('application/json')) {
         return json(res, 415, { error: 'expected application/json' });
       }
@@ -898,6 +980,12 @@ export async function start({
       }
       if (req.method === 'POST' && req.url === '/analyze') {
         return json(res, 200, await analyze(keyFor(req), await readBody(req)));
+      }
+      if (req.method === 'POST' && req.url === '/explain') {
+        return json(res, 200, await explain(keyFor(req), await readBody(req)));
+      }
+      if (req.method === 'POST' && req.url === '/question') {
+        return json(res, 200, await question(keyFor(req), await readBody(req)));
       }
       if (req.method === 'POST' && req.url === '/gear') {
         return json(res, 200, await gear(keyFor(req), await readBody(req)));
@@ -918,8 +1006,8 @@ export async function start({
         return json(res, 200, { entries, file: usageFile });
       }
       if (req.method === 'POST' && req.url === '/run') {
-        const { code, keep } = await readBody(req);
-        await runCode(code, keep);
+        const { code, keep, full } = await readBody(req);
+        await runCode(code, keep, typeof full === 'string' ? full : code);
         return json(res, 200, { ok: true });
       }
       if (req.method === 'POST' && req.url === '/part') { // the parts strip's toggle
@@ -1005,8 +1093,9 @@ export async function start({
     ws.send(JSON.stringify({ type: 'record', data: rec }));
     ws.send(JSON.stringify({ type: 'fade', data: fade }));
     ws.on('close', () => clients.delete(ws));
-    ws.isAlive = true;
-    ws.on('pong', () => { ws.isAlive = true; });
+    const live = /** @type {import('ws').WebSocket & { isAlive?: boolean }} */ (ws); // isAlive is ours, for the heartbeat
+    live.isAlive = true;
+    ws.on('pong', () => { live.isAlive = true; });
   });
   // Ping every 15 s: keeps idle sockets from being dropped, and clears out ones that died silently.
   const heartbeat = setInterval(() => {
@@ -1019,7 +1108,7 @@ export async function start({
 
   await new Promise((ok, fail) => {
     server.once('error', fail);
-    server.listen(port, '127.0.0.1', ok);
+    server.listen(port, '127.0.0.1', () => ok(undefined));
   });
 
   let stopped = false;

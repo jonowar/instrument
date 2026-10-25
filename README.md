@@ -17,8 +17,9 @@ by GitHub Pages; `docs/og.png` is the preview image.
   while the editor shows only the latest code. Your own edits between turns are sent along as the current
   version. **💬** shows the full history and can rewind to any earlier turn (Claude's context rewinds with it); **New** starts over.
   Chords are annotated with their name, notes and role in the key.
-- **Run / Stop** (⌘↵ / ⌘.) against a local `sclang` + `scsynth`.
-- **Live coding**: **● Live** re-runs the code a moment after you stop typing (once brackets balance). Each `Pdef`/`Ndef`
+- **Syntax highlighting** in the editor: comments, strings, symbols, numbers, class names, keywords and `~variables`.
+- **Run / Stop** (⌘↵ / ⌘.) against a local `sclang` + `scsynth`. Run stops whatever is playing first; Live re-runs don't.
+- **Live coding**: **● Live** re-runs the code a moment after you stop typing (once brackets balance), sending only the statements that changed, so unchanged patterns keep playing instead of restarting (a changed `var` or `~setting` re-runs everything). Each `Pdef`/`Ndef`
   appears in the **parts strip** as a toggle (lit while playing; click to mute or unmute, and mutes survive re-runs). A muted part keeps running
   silently, so it comes back in on the beat. **Mute all** / **Unmute all** do every part at once.
   Deleting or commenting out a part stops it on the next run; **⌘;** comments or uncomments the selected lines.
@@ -41,6 +42,12 @@ by GitHub Pages; `docs/og.png` is the preview image.
   with a player, the code, a Copy button and a `.scd` download, with a preview for iMessage, Slack and
   Discord. The link isn't listed anywhere, and it stops working after 90 days or as soon as you
   **Unshare** it. A small Cloudflare Worker serves it, not your machine; see [`share/`](share/).
+- **📖 Learn**: Claude walks through the code in the editor step by step (or only the lines you've selected),
+  written for programmers new to audio: what each step does, the sound idea behind it, the terms worth
+  knowing (class names link to SuperCollider's own docs) and small experiments to try. Click a step to select
+  its lines, click an experiment to put it in the prompt, and ask follow-up questions about the code in the
+  panel. Each answer shows its cost; asking again for unchanged code is free. Like everything Claude writes,
+  it can be wrong: treat it as a study partner and check the SuperCollider docs.
 - **Error tile**: when a run errors or warns, Claude explains why (without rewriting your code); **Fix** asks for a
   corrected version. With **auto-fix** ticked, the fix is applied and run straight away, at most twice per Run,
   and never over code you've edited since. Live-mode edits are only explained when you press Explain.
@@ -127,6 +134,8 @@ browser ──HTTP──▶ server.js ──stdin──▶ sclang ──▶ scsy
    ▲                 │  ▲                 │
    └───WebSocket─────┘  └──UDP/OSC────────┘   (scope.scd, midi.scd stream audio snapshots and MIDI)
 ```
+
+The page is plain ES modules in `js/` (no bundler), typed with JSDoc and checked by `npm run typecheck`.
 
 `server.js` spawns `sclang`, calls the Claude API, and writes each run to a temp file wrapped in `fork { … }`
 so `s.sync` works anywhere. `scope.scd`, `midi.scd`, `parts.scd` and `record.scd` run inside sclang at
