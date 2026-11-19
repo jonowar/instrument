@@ -176,6 +176,10 @@ const stripFences = (t) => t.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '')
 // Speed settings from the page's ⚙ dialog. Effort trades depth of reasoning for speed: low answers
 // quickest, which suits short sound sketches. The model list is the PRICES table plus MODEL from .env.
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+// Thinking counts against max_tokens, so higher effort needs a bigger output budget or replies get cut off.
+const EFFORT_BUDGET = { high: 2, xhigh: 3, max: 4 };
+const MAX_OUTPUT = 64000;
+const budgetFor = (maxTokens, effort) => Math.min(maxTokens * (EFFORT_BUDGET[effort] ?? 1), Math.max(maxTokens, MAX_OUTPUT));
 const pickModel = (m) => (m && (m in PRICES || m === MODEL) ? m : MODEL);
 
 // --- the API key ---
@@ -321,7 +325,7 @@ async function ask(apiKey, system, content, maxTokens, { model, effort, format, 
     // Stream and collect: large max_tokens values can exceed the SDK's limit for non-streaming requests.
     const res = await client.messages
       .stream(/** @type {any} */ ({ // output_config is newer than the SDK's types
-        model, max_tokens: maxTokens, system, messages,
+        model, max_tokens: budgetFor(maxTokens, effort), system, messages,
         ...(Object.keys(output_config).length && { output_config }),
       }))
       .finalMessage();
